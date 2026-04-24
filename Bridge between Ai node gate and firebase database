@@ -1,0 +1,56 @@
+import cv2
+import easyocr
+import firebase_admin
+from firebase_admin import credentials, db
+import time
+
+# Firebase Connection
+cred = credentials.Certificate("smartparking.json")
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred, {
+        'databaseURL': 'https://smartparkingsystembyabhay-default-rtdb.firebaseio.com/'
+    })
+
+reader = easyocr.Reader(['en'])
+
+
+def start_auto_scanning():
+    cap = cv2.VideoCapture(0)
+    print(" Scanner ON... Gadi detect hote hi Firebase update hoga.")
+
+    processed_plates = {}
+
+    while True:
+        ret, frame = cap.read()
+        if not ret: break
+
+        results = reader.readtext(frame)
+        for (bbox, text, prob) in results:
+            plate_no = "".join(e for e in text if e.isalnum()).upper()
+
+            if len(plate_no) > 5:
+                curr_time = time.time()
+                if plate_no not in processed_plates or (curr_time - processed_plates[plate_no] > 10):
+
+                    is_reg = db.reference(f'registered_cars/{plate_no}').get()
+
+                    if is_reg:
+                        print(f"Authorized: {plate_no}")
+                        db.reference('parking/cars').push({
+                            'carNo': plate_no,
+                            'entryTime': int(curr_time * 1000),
+                            'payment': 'Pending',
+                            'status': 'AUTHORIZED'
+                        })
+                        processed_plates[plate_no] = curr_time
+                    else:
+                        print(f"Unauthorized: {plate_no}")
+                        processed_plates[plate_no] = curr_time
+
+        cv2.imshow('Python Scanner (Background)', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+    cap.release()
+    cv2.destroyAllWindows()
+if __name__ == "__main__":
+    start_auto_scanning()
