@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Scanner - Mobile</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; text-align: center; padding: 20px; margin: 0; }
+        #video { width: 100%; max-width: 450px; border: 4px solid #1a73e8; border-radius: 20px; box-shadow: 0 0 20px rgba(26, 115, 232, 0.5); }
+        .status-card { background: #1e1e1e; padding: 20px; border-radius: 15px; margin-top: 20px; border: 1px solid #333; }
+        #status { font-size: 1.4rem; font-weight: bold; margin-bottom: 10px; }
+        #timer-box { font-size: 2.5rem; color: #ffc107; font-weight: 900; }
+        .detecting { color: #00e676; text-shadow: 0 0 10px rgba(0,230,118,0.5); }
+    </style>
+</head>
+<body>
+
+    <h2 style="margin-bottom:10px;">🚗 AI Gate Node</h2>
+    <video id="video" autoplay playsinline muted></video>
+
+    <div class="status-card">
+        <div id="status">Scanning for License Plates...</div>
+        <div id="timer-box"><span id="sec">0</span>s</div>
+        <p style="color: gray; font-size: 0.8rem;">Hold car for 5 seconds to register</p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCImmlGPsLIMyTGxpPjI7SC80wNCA9T-Ao",
+            databaseURL: "https://smartparkingsystembyabhay-default-rtdb.firebaseio.com/",
+            projectId: "smartparkingsystembyabhay",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let holdTime = 0;
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                document.getElementById('video').srcObject = stream;
+                
+                setInterval(() => {
+                    // AI Simulation: Car detected
+                    let carDetected = true; 
+
+                    if(carDetected) {
+                        holdTime++;
+                        document.getElementById('status').innerText = "Car Detected! HOLD...";
+                        document.getElementById('status').className = "detecting";
+                    } else {
+                        holdTime = 0;
+                        document.getElementById('status').innerText = "Scanning for License Plates...";
+                        document.getElementById('status').className = "";
+                    }
+                    document.getElementById('sec').innerText = holdTime;
+
+                    if(holdTime >= 5) {
+                        registerEntry();
+                        holdTime = 0;
+                    }
+                }, 1000);
+            } catch (err) { alert("Camera Error: " + err); }
+        }
+
+        function registerEntry() {
+            const plate = "HR30AD" + Math.floor(1000 + Math.random() * 9000);
+            db.ref("parking/cars").once("value", snap => {
+                let occupied = [];
+                snap.forEach(c => { if(c.val().payment === "Pending") occupied.push(parseInt(c.val().slot)); });
+
+                let slot = null;
+                for(let i=1; i<=10; i++) { if(!occupied.includes(i)) { slot = i; break; } }
+
+                if(slot) {
+                    db.ref("parking/cars").push({
+                        carNo: plate,
+                        slot: slot,
+                        entryTime: Date.now(),
+                        payment: "Pending",
+                        gate: "Closed",
+                        finalBill: 0
+                    });
+                    alert("Car Registered: " + plate);
+                }
+            });
+        }
+        startCamera();
+    </script>
+</body>
+</html>
