@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Scanner - Live Status</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; text-align: center; padding: 20px; margin: 0; }
+        #video { width: 100%; max-width: 450px; border: 4px solid #1a73e8; border-radius: 20px; box-shadow: 0 0 20px rgba(26, 115, 232, 0.5); }
+        .status-card { background: #1e1e1e; padding: 20px; border-radius: 15px; margin-top: 20px; border: 1px solid #333; }
+        #status { font-size: 1.4rem; font-weight: bold; margin-bottom: 10px; transition: 0.3s; }
+        #car-info { font-size: 1.8rem; color: #ffc107; font-weight: 900; }
+        .detecting { color: #00e676; text-shadow: 0 0 10px rgba(0,230,118,0.5); }
+    </style>
+</head>
+<body>
+
+    <h2>🚗 AI Gate Node (Live)</h2>
+    <video id="video" autoplay playsinline muted></video>
+
+    <div class="status-card">
+        <div id="status">Waiting for Python Scanner...</div>
+        <div id="car-info">-- SCANNING --</div>
+        <p style="color: gray; font-size: 0.8rem;">Real-time sync with auto_scanner.py</p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCImmlGPsLIMyTGxpPjI7SC80wNCA9T-Ao",
+            databaseURL: "https://smartparkingsystembyabhay-default-rtdb.firebaseio.com/",
+            projectId: "smartparkingsystembyabhay",
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Camera feed for UI only
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                document.getElementById('video').srcObject = stream;
+            } catch (err) { console.log("Camera Preview Error: " + err); }
+        }
+
+        // --- Firebase Listener (Connecting to Python) ---
+        db.ref("parking/cars").limitToLast(1).on("value", (snapshot) => {
+            snapshot.forEach((childSnapshot) => {
+                const data = childSnapshot.val();
+                const now = Date.now();
+                
+                // Agar data pichle 5 second ke andar aaya hai
+                if (now - data.entryTime < 5000) {
+                    document.getElementById('status').innerText = "AUTHORIZED ENTRY";
+                    document.getElementById('status').className = "detecting";
+                    document.getElementById('car-info').innerText = data.carNo;
+
+                    // 4 second baad reset karein
+                    setTimeout(() => {
+                        document.getElementById('status').innerText = "Scanning for License Plates...";
+                        document.getElementById('status').className = "";
+                        document.getElementById('car-info').innerText = "-- SCANNING --";
+                    }, 4000);
+                }
+            });
+        });
+
+        startCamera();
+    </script>
+</body>
+</html>
