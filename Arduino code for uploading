@@ -1,0 +1,94 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Servo.h>
+
+#define SS_PIN 10
+#define RST_PIN 4
+#define BUZZER 8
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+Servo gateServo;
+
+bool paymentReceived = false;
+bool gateBusy = false;
+
+byte validUID[4] = {0xC2, 0x21, 0xDC, 0x05};
+
+// --- Speed Settings ---
+int openDelay = 15;   // Opening: Medium Smooth
+int closeDelay = 50;  // Closing: Very Slow (Shake-free)
+int closePos = 5;     // Resting position (Zero jitter)
+int openPos = 90;    
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  pinMode(BUZZER, OUTPUT);
+  gateServo.attach(9);
+  gateServo.write(closePos); 
+  Serial.println("System Ready: Ultra-Smooth Mode");
+}
+
+void openGate() {
+  if (gateBusy) return;
+  gateBusy = true;
+  
+  digitalWrite(BUZZER, HIGH);
+  delay(150); 
+  digitalWrite(BUZZER, LOW);
+
+  // --- Smooth Opening ---
+  Serial.println("Opening...");
+  for (int pos = closePos; pos <= openPos; pos++) {
+    gateServo.write(pos);
+    delay(openDelay); 
+  }
+
+  delay(3000); 
+
+  // --- Ultra Slow & Smooth Closing ---
+  Serial.println("Closing Very Slowly...");
+  for (int pos = openPos; pos >= closePos; pos--) {
+    gateServo.write(pos);
+    
+    // Extra Slow logic for the last 20 degrees
+    if (pos < 25) {
+      delay(closeDelay + 20); // End mein aur bhi dheere (70ms)
+    } else {
+      delay(closeDelay); // Normal closing (50ms)
+    }
+  }
+
+  gateBusy = false;
+  Serial.println("Gate Closed.");
+}
+
+bool checkRFID() {
+  if (!rfid.PICC_IsNewCardPresent()) return false;
+  if (!rfid.PICC_ReadCardSerial()) return false;
+  for (byte i = 0; i < 4; i++) {
+    if (rfid.uid.uidByte[i] != validUID[i]) {
+      rfid.PICC_HaltA();
+      return false;
+    }
+  }
+  rfid.PICC_HaltA();
+  return true;
+}
+
+void loop() {
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "pay") paymentReceived = true;
+  }
+  
+  bool rfidOK = checkRFID();
+  
+  if ((paymentReceived || rfidOK) && !gateBusy) {
+    openGate();
+    paymentReceived = false; 
+  }
+  delay(50);
+}
